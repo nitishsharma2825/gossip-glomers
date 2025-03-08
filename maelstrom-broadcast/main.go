@@ -13,7 +13,7 @@ func main() {
 
 	s := &server{
 		node:     n,
-		messages: make([]float64, 0),
+		messages: make(map[float64]bool, 0),
 	}
 
 	n.Handle("broadcast", s.broadcastHandler)
@@ -28,7 +28,7 @@ func main() {
 type server struct {
 	node *maelstrom.Node
 
-	messages []float64
+	messages map[float64]bool
 	mu       sync.Mutex
 }
 
@@ -38,9 +38,26 @@ func (s *server) broadcastHandler(msg maelstrom.Message) error {
 		return err
 	}
 
+	message := body["message"].(float64)
 	s.mu.Lock()
-	s.messages = append(s.messages, body["message"].(float64))
+	if _, exists := s.messages[message]; exists {
+		s.mu.Unlock()
+		return nil
+	}
+	s.messages[message] = true
 	s.mu.Unlock()
+
+	for _, nodeId := range s.node.NodeIDs() {
+		if nodeId == msg.Src || nodeId == msg.Dest {
+			continue
+		}
+
+		go func() {
+			if err := s.node.Send(nodeId, body); err != nil {
+				panic(err)
+			}
+		}()
+	}
 
 	response := make(map[string]any)
 	response["type"] = "broadcast_ok"
@@ -56,7 +73,11 @@ func (s *server) readHandler(msg maelstrom.Message) error {
 
 	response := make(map[string]any)
 	response["type"] = "read_ok"
-	response["messages"] = s.messages
+	result := make([]float64, 0)
+	for msg := range s.messages {
+		result = append(result, msg)
+	}
+	response["messages"] = result
 
 	return s.node.Reply(msg, response)
 }
