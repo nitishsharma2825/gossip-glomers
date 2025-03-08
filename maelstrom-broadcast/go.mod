@@ -1,4 +1,4 @@
-module maelstrom-echo
+module maelstrom-broadcast
 
 go 1.23.2
 
