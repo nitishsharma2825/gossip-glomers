@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"sync"
+	"time"
 
 	maelstrom "github.com/jepsen-io/maelstrom/demo/go"
 )
@@ -47,17 +48,7 @@ func (s *server) broadcastHandler(msg maelstrom.Message) error {
 	s.messages[message] = true
 	s.mu.Unlock()
 
-	for _, nodeId := range s.node.NodeIDs() {
-		if nodeId == msg.Src || nodeId == msg.Dest {
-			continue
-		}
-
-		go func() {
-			if err := s.node.Send(nodeId, body); err != nil {
-				panic(err)
-			}
-		}()
-	}
+	s.broadcast(msg.Src, body)
 
 	response := make(map[string]any)
 	response["type"] = "broadcast_ok"
@@ -92,4 +83,20 @@ func (s *server) topologyHandler(msg maelstrom.Message) error {
 	response["type"] = "topology_ok"
 
 	return s.node.Reply(msg, response)
+}
+
+func (s *server) broadcast(src string, body map[string]any) {
+	for _, nodeId := range s.node.NodeIDs() {
+		if nodeId == s.node.ID() || nodeId == src {
+			continue
+		}
+
+		go func() {
+			err := s.node.Send(nodeId, body)
+			for err != nil {
+				time.Sleep(time.Millisecond * 100)
+				err = s.node.Send(nodeId, body)
+			}
+		}()
+	}
 }
