@@ -3,10 +3,14 @@ package main
 import (
 	"encoding/json"
 	"log"
+	"strconv"
+	"sync"
 	"time"
 
 	maelstrom "github.com/jepsen-io/maelstrom/demo/go"
 )
+
+var mu sync.Mutex
 
 func main() {
 	n := maelstrom.NewNode()
@@ -19,7 +23,9 @@ func main() {
 
 		body["type"] = "generate_ok"
 
-		id := time.Now().Nanosecond()
+		mu.Lock()
+		id := strconv.Itoa(time.Now().Nanosecond()) + n.ID()
+		mu.Unlock()
 
 		body["id"] = id
 		return n.Reply(msg, body)
